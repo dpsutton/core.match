@@ -5,7 +5,8 @@
         clojure.core.match.array
         clojure.core.match.debug
         clojure.core.match.regex)
-  (:use [clojure.test]))
+  (:use [clojure.test])
+  (:import [clojure.core.match.protocols IExistentialPattern IPseudoPattern]))
 
 (set! *warn-on-reflection* true)
 
@@ -962,3 +963,44 @@
            (match [m]
              [{:a.b _}] :a0))
          :a0)))
+
+(defn make-pattern-matrix
+  [pm]
+  (let [rows (mapv (fn [row] (mapv #(case %
+                                      :wildcard
+                                      (wildcard-pattern)
+
+                                      :existential
+                                      (reify IExistentialPattern)
+
+                                      %)
+                                   row))
+                   pm)]
+    {:rows rows}))
+
+(let [_ :wildcard
+      * :existential]
+  (deftest necessary-column-tests
+    (testing "simple with two"
+      (let [pm  (-> [[_ 2]
+                     [1 2]]
+                    make-pattern-matrix)]
+        (is (= 1 (necessary-column pm)))))
+    (testing "simple with three"
+     (let [pm (-> [[_     false true]
+                   [false true  _ ]
+                   [true  _     false]
+                   [true  _     true]
+                   [_     _     _]]
+                  make-pattern-matrix)]
+       (is (= 1 (necessary-column pm))))))
+
+  (deftest counter-example
+    (testing "they differ for some reason"
+      (let [pm (-> [[* false true]
+                    [false true _]
+                    [_ _ false]
+                    [_ _ true]
+                    [_ _ _]]
+                   make-pattern-matrix)]
+        (is (= 1 (necessary-column pm)))))))

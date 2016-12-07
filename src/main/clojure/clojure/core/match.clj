@@ -545,46 +545,28 @@
   (or (wildcard-pattern? x)
       (existential-pattern? x)))
 
-(defn constructors-above? [pm i j]
-  (every?
-    (comp not wildcard-or-existential?)
-    (take j (column pm i))))
-
-;; based on paper we used to check the following
-;; (wildcard-pattern? p) (not (useful? (drop-nth pm i) j))
-;; IMPORTANT NOTE: this calculation is very very slow,
-;; we should look at this more closely - David
-
-(defn pattern-score [pm i j]
-  (let [p (pattern-at pm i j)]
-    (cond
-      (or (wildcard-pattern? p)
-          (not (constructors-above? pm i j))) 0
-      (existential-pattern? p) 1
-      :else 2)))
-
-;; DEAD CODE for now - David
-;; (defn useful? [pm j]
-;;   (some #(useful-p? pm % j)
-;;         (range (count (row pm j)))))
-
-(defn useful-matrix [pm]
-  (->> (for [j (range (height pm))
-             i (range (width pm))]
-         (pattern-score pm i j))
-    (partition (width pm))
-    (map vec)
-    vec))
-
 (defn necessary-column [pm]
-  (->> (apply map vector (useful-matrix pm))
-    (map-indexed score-column)
-    (reduce
-      (fn [[col score :as curr]
-           [ocol oscore :as cand]]
-        (if (> oscore score) cand curr))
-      [0 0])
-    first))
+  (->> (apply map vector (rows pm)) ; get values by column
+       (map #(reduce (fn [acc item]
+                       (cond
+                         ;; if we run into a wildcard pattern, no more
+                         ;; patterns should be counted
+                         (wildcard-pattern? item)
+                         (reduced acc)
+
+                         (existential-pattern? item)
+                         (inc acc)
+
+                         :else (+ 2 acc)))
+                     0
+                     %))
+       (map-indexed vector)
+       (reduce (fn [[inx weight :as acc] [cinx cweight :as current]]
+                 (if (> cweight weight)
+                   current
+                   acc))
+               [0 0])
+       first))
 
 (defn select [pm]
   (swap pm (necessary-column pm)))
